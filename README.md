@@ -1,6 +1,6 @@
 # Smart Rover RC Remote
 
-![Smart Rover Preview](assets/preview.png)
+<img width="1920" height="1080" alt="Rc-Remote-Preview" src="https://github.com/user-attachments/assets/be39c5f6-4da6-43f7-9a81-73a7929048ba" />
 
 Smart Rover is a Flutter mobile app to control a Bluetooth serial robot with manual controls, autonomous modes, and voice commands.
 
