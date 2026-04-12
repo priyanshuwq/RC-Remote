@@ -1,5 +1,5 @@
 name: remote
-description: "Muscle Monster – RC Robot Car Controller"
+description: "Smart Rover – RC Robot Car Controller"
 publish_to: 'none'
 version: 1.0.0+1
 
