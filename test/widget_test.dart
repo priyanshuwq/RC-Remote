@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:remote/bluetooth/bluetooth_service.dart';
-import 'package:remote/main.dart';
+import 'package:remote/app.dart';
 
 void main() {
   testWidgets('SmartRoverApp smoke test', (WidgetTester tester) async {
