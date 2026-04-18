@@ -15,7 +15,7 @@ class BluetoothSheet extends StatefulWidget {
 class _BluetoothSheetState extends State<BluetoothSheet> {
   @override
   void initState() {
-    super.initState();
+    super.initState();  // Auto scan the devices when bluetooth sheet opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<BluetoothService>().loadBondedDevices();
