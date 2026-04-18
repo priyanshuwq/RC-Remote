@@ -5,8 +5,22 @@ import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
 import '../bluetooth/bluetooth_service.dart';
 import '../theme/colors.dart';
 
-class BluetoothSheet extends StatelessWidget {
+class BluetoothSheet extends StatefulWidget {
   const BluetoothSheet({super.key});
+
+  @override
+  State<BluetoothSheet> createState() => _BluetoothSheetState();
+}
+
+class _BluetoothSheetState extends State<BluetoothSheet> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<BluetoothService>().loadBondedDevices();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
