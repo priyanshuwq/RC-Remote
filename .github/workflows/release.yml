@@ -37,10 +37,13 @@ jobs:
       - name: Build APK (Release)
         run: flutter build apk --release
 
+      - name: Rename APK
+        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/RC-Remote-${{ github.event.inputs.version }}.apk
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.version }}
           name: Release ${{ github.event.inputs.version }}
           generate_release_notes: true
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: build/app/outputs/flutter-apk/RC-Remote-${{ github.event.inputs.version }}.apk
