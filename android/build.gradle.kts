@@ -22,6 +22,20 @@ subprojects {
 
 subprojects {
     project.plugins.withId("com.android.library") {
+        val android = project.extensions.getByName("android")
+        val cls = android.javaClass
+        try {
+            cls.getMethod("setCompileSdkVersion", Integer.TYPE).invoke(android, 36)
+        } catch (_: Exception) {
+            try {
+                cls.getMethod("setCompileSdk", Integer::class.java).invoke(android, 36)
+            } catch (_: Exception) { }
+        }
+    }
+}
+
+subprojects {
+    project.plugins.withId("com.android.library") {
         val androidExtension = project.extensions.findByName("android")
         if (androidExtension != null) {
             val extensionClass = androidExtension.javaClass
