@@ -55,13 +55,19 @@ class TopBar extends StatelessWidget {
             children: [
               const DotCluster(),
               const SizedBox(width: 10),
-              Text(
-                'RC REMOTE',
-                style: GoogleFonts.dotGothic16(
-                  color: AppTheme.accentRed,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 2.5,
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'RC REMOTE',
+                    style: GoogleFonts.dotGothic16(
+                      color: AppTheme.accentRed,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 2.5,
+                    ),
+                  ),
                 ),
               ),
             ],

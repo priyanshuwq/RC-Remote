@@ -404,3 +404,142 @@ class RadialDotHaloPainter extends CustomPainter {
   @override
   bool shouldRepaint(_) => false;
 }
+
+// ── Gyro Tilt Dot Matrix Animation ───────────────────────────────────────────
+/// Nothing OS–style dot-matrix tilt indicator for Gyro Mode.
+/// [tiltX] lateral tilt: -1 (left) … +1 (right)
+/// [tiltY] forward/back: -1 (back) … +1 (forward)
+class GyroTiltAnimation extends StatefulWidget {
+  final double tiltX;
+  final double tiltY;
+  const GyroTiltAnimation({
+    super.key,
+    required this.tiltX,
+    required this.tiltY,
+  });
+
+  @override
+  State<GyroTiltAnimation> createState() => _GyroTiltAnimationState();
+}
+
+class _GyroTiltAnimationState extends State<GyroTiltAnimation>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) => CustomPaint(
+        painter: _GyroTiltPainter(
+          tiltX: widget.tiltX,
+          tiltY: widget.tiltY,
+          pulse: _ctrl.value,
+        ),
+        size: const Size(140, 140),
+      ),
+    );
+  }
+}
+
+class _GyroTiltPainter extends CustomPainter {
+  final double tiltX;
+  final double tiltY;
+  final double pulse;
+
+  const _GyroTiltPainter({
+    required this.tiltX,
+    required this.tiltY,
+    required this.pulse,
+  });
+
+  static const int _cols = 11;
+  static const int _rows = 11;
+  static const double _spacing = 12.0;
+  static const double _dotR = 2.8;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+
+    final startX = cx - ((_cols - 1) / 2) * _spacing;
+    final startY = cy - ((_rows - 1) / 2) * _spacing;
+
+    final activeCol =
+        ((_cols - 1) / 2 + tiltX.clamp(-1.0, 1.0) * ((_cols - 1) / 2))
+            .round();
+    final activeRow =
+        ((_rows - 1) / 2 - tiltY.clamp(-1.0, 1.0) * ((_rows - 1) / 2))
+            .round();
+
+    for (int row = 0; row < _rows; row++) {
+      for (int col = 0; col < _cols; col++) {
+        final dx = startX + col * _spacing;
+        final dy = startY + row * _spacing;
+
+        final dC = (col - activeCol).abs();
+        final dR = (row - activeRow).abs();
+        final dist = math.sqrt((dC * dC + dR * dR).toDouble());
+
+        final bool isCenter = dC == 0 && dR == 0;
+        final bool isInner = dist <= 1.4;
+        final bool isMid = dist <= 2.5;
+
+        Color color;
+        double radius;
+        if (isCenter) {
+          final alpha = 0.7 + 0.3 * pulse;
+          color = AppTheme.accentRed.withValues(alpha: alpha);
+          radius = _dotR + 0.8;
+        } else if (isInner) {
+          color = AppTheme.accentRed.withValues(alpha: 0.55);
+          radius = _dotR;
+        } else if (isMid) {
+          color = AppTheme.accentRed.withValues(alpha: 0.2);
+          radius = _dotR - 0.4;
+        } else {
+          final alpha = math.max(0.05, 0.18 - dist * 0.02);
+          color = Colors.white.withValues(alpha: alpha);
+          radius = _dotR - 0.8;
+        }
+
+        canvas.drawCircle(Offset(dx, dy), radius, Paint()..color = color);
+      }
+    }
+
+    // Subtle crosshair axes
+    final axisPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.08)
+      ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(startX, cy),
+      Offset(startX + (_cols - 1) * _spacing, cy),
+      axisPaint,
+    );
+    canvas.drawLine(
+      Offset(cx, startY),
+      Offset(cx, startY + (_rows - 1) * _spacing),
+      axisPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GyroTiltPainter old) =>
+      old.tiltX != tiltX || old.tiltY != tiltY || old.pulse != pulse;
+}

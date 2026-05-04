@@ -15,6 +15,10 @@ class BluetoothService extends ChangeNotifier {
   static const String cmdBackward = 'D';
   static const String cmdLeft = 'L';
   static const String cmdRight = 'R';
+  static const String cmdForwardLeft = 'G';
+  static const String cmdForwardRight = 'I';
+  static const String cmdBackwardLeft = 'H';
+  static const String cmdBackwardRight = 'J';
   static const String cmdStop = 'S';
   static const String cmdModeManual = 'MODE_MANUAL';
   static const String cmdModeObstacle = 'MODE_OBSTACLE';

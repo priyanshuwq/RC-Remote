@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 import '../bluetooth/bluetooth_service.dart';
 import '../voice/voice_commands.dart';
@@ -27,6 +29,17 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _backActive = false;
   bool _leftActive = false;
   bool _rightActive = false;
+
+  // ── Gyro Mode ──────────────────────────────────────────────────────────────
+  bool _gyroMode = false;
+  double _gyroTiltX = 0.0; // -1 left … +1 right
+  double _gyroTiltY = 0.0; // -1 back  … +1 forward
+  String _lastGyroCmd = '';
+  StreamSubscription<AccelerometerEvent>? _accelSub;
+
+  static const double _gyroDeadzone = 2.5; // m/s² threshold
+  static const double _gyroMax = 7.0;      // clamp range
+  // ──────────────────────────────────────────────────────────────────────────
 
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
@@ -172,8 +185,104 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ── Gyro Mode helpers ─────────────────────────────────────────────────────
+  void _startGyro() {
+    final bt = context.read<BluetoothService>();
+    _accelSub = accelerometerEventStream().listen((AccelerometerEvent e) {
+      // In LANDSCAPE mode:
+      // e.x: Longitudinal tilt (forward/back)
+      // e.y: Lateral tilt (left/right)
+
+      // INVERTED: User said forward tilt resulted in "down" behavior.
+      // So we flip the sign of rawFwdBack.
+      final rawFwdBack = -e.x; 
+      final rawLeftRight = e.y;
+
+      // Update UI tilt values (normalized -1 to 1)
+      final normY = (rawFwdBack.clamp(-_gyroMax, _gyroMax) / _gyroMax);
+      final normX = (rawLeftRight.clamp(-_gyroMax, _gyroMax) / _gyroMax);
+
+      if (!mounted) return;
+      setState(() {
+        _gyroTiltX = normX;
+        _gyroTiltY = normY;
+      });
+
+      String cmd;
+
+      final bool isFwd = rawFwdBack > _gyroDeadzone;
+      final bool isBk = rawFwdBack < -_gyroDeadzone;
+      final bool isRt = rawLeftRight > _gyroDeadzone;
+      final bool isLt = rawLeftRight < -_gyroDeadzone;
+
+      if (isFwd && isLt) {
+        cmd = BluetoothService.cmdForwardLeft;
+      } else if (isFwd && isRt) {
+        cmd = BluetoothService.cmdForwardRight;
+      } else if (isBk && isLt) {
+        cmd = BluetoothService.cmdBackwardLeft;
+      } else if (isBk && isRt) {
+        cmd = BluetoothService.cmdBackwardRight;
+      } else if (isFwd) {
+        cmd = BluetoothService.cmdForward;
+      } else if (isBk) {
+        cmd = BluetoothService.cmdBackward;
+      } else if (isLt) {
+        cmd = BluetoothService.cmdLeft;
+      } else if (isRt) {
+        cmd = BluetoothService.cmdRight;
+      } else {
+        cmd = BluetoothService.cmdStop;
+      }
+
+      if (cmd != _lastGyroCmd) {
+        bt.sendCommand(cmd);
+        _lastGyroCmd = cmd;
+
+        // Update button visual states to reflect 8-direction tilt
+        if (!mounted) return;
+        setState(() {
+          _fwdActive = isFwd;
+          _backActive = isBk;
+          _leftActive = isLt;
+          _rightActive = isRt;
+        });
+      }
+    });
+  }
+
+  void _stopGyro() {
+    _accelSub?.cancel();
+    _accelSub = null;
+    context.read<BluetoothService>().sendCommand(BluetoothService.cmdStop);
+    setState(() {
+      _gyroTiltX = 0.0;
+      _gyroTiltY = 0.0;
+      _lastGyroCmd = '';
+      // Reset button states
+      _fwdActive = false;
+      _backActive = false;
+      _leftActive = false;
+      _rightActive = false;
+    });
+  }
+
+  void _toggleGyroMode() {
+    HapticFeedback.mediumImpact();
+    setState(() => _gyroMode = !_gyroMode);
+    if (_gyroMode) {
+      _startGyro();
+      _showSnack('Gyro Mode ON — tilt to drive');
+    } else {
+      _stopGyro();
+      _showSnack('Gyro Mode OFF');
+    }
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   @override
   void dispose() {
+    _accelSub?.cancel();
     _overlayEntry?.remove();
     super.dispose();
   }
@@ -183,74 +292,110 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       resizeToAvoidBottomInset: false,
       backgroundColor: AppTheme.bg,
-      body: Stack(
-        children: [
-          const Positioned.fill(child: DotGrid()),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Column(
-                children: [
-                  TopBar(
-                    onBluetoothTap: _showBluetooth,
-                    onPowerTap: () {
-                      final bt = context.read<BluetoothService>();
-                      if (bt.isConnected) {
-                        bt.disconnect();
-                        _showSnack('Bluetooth disconnected');
-                      } else {
-                        _showSnack('Not connected');
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // LEFT PANEL: FWD / BACK
-                        Expanded(flex: 5, child: _buildFwdBackPanel()),
-                        const SizedBox(width: 20),
-
-                        // CENTER: Animation + Mode
-                        Expanded(
-                          flex: 6,
-                          child: Column(
-                            children: [
-                              Expanded(child: _centerCar()),
-                              const SizedBox(height: 10),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    _modeButton(),
-                                    if (_activeMode == 'Obstacle Avoiding' ||
-                                        _activeMode == 'Human Following') ...[
-                                      const SizedBox(width: 12),
-                                      _startStopButton(),
-                                    ] else if (_activeMode == 'Voice Control') ...[
-                                      const SizedBox(width: 12),
-                                      _voiceMicButton(),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(width: 20),
-                        // RIGHT PANEL: LEFT / RIGHT
-                        Expanded(flex: 5, child: _buildLeftRightPanel()),
-                      ],
+      body: GestureDetector(
+        // Left swipe on the home screen toggles Gyro Mode
+        onHorizontalDragEnd: (details) {
+          if (details.primaryVelocity != null &&
+              details.primaryVelocity! < -400) {
+            _toggleGyroMode();
+          }
+        },
+        child: Stack(
+          children: [
+            const Positioned.fill(child: DotGrid()),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 20, vertical: 12),
+                child: Column(
+                  children: [
+                    TopBar(
+                      onBluetoothTap: _showBluetooth,
+                      onPowerTap: () {
+                        final bt = context.read<BluetoothService>();
+                        if (bt.isConnected) {
+                          bt.disconnect();
+                          _showSnack('Bluetooth disconnected');
+                        } else {
+                          _showSnack('Not connected');
+                        }
+                      },
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 14),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // LEFT PANEL: FWD / BACK (disabled in gyro mode)
+                          Expanded(
+                            flex: 5,
+                            child: IgnorePointer(
+                              ignoring: _gyroMode,
+                              child: AnimatedOpacity(
+                                opacity: _gyroMode ? 0.6 : 1.0,
+                                duration: const Duration(milliseconds: 300),
+                                child: _buildFwdBackPanel(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+
+                          // CENTER: Animation + Mode
+                          Expanded(
+                            flex: 6,
+                            child: Column(
+                              children: [
+                                Expanded(child: _centerCar()),
+                                const SizedBox(height: 10),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                    children: [
+                                      _modeButton(),
+                                      if (!_gyroMode) ...[
+                                        if (_activeMode ==
+                                                'Obstacle Avoiding' ||
+                                            _activeMode ==
+                                                'Human Following') ...[
+                                          const SizedBox(width: 12),
+                                          _startStopButton(),
+                                        ] else if (_activeMode ==
+                                            'Voice Control') ...[
+                                          const SizedBox(width: 12),
+                                          _voiceMicButton(),
+                                        ],
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(width: 20),
+                          // RIGHT PANEL: LEFT / RIGHT (disabled in gyro mode)
+                          Expanded(
+                            flex: 5,
+                            child: IgnorePointer(
+                              ignoring: _gyroMode,
+                              child: AnimatedOpacity(
+                                opacity: _gyroMode ? 0.6 : 1.0,
+                                duration: const Duration(milliseconds: 300),
+                                child: _buildLeftRightPanel(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -365,7 +510,10 @@ class _HomeScreenState extends State<HomeScreen> {
               child: CustomPaint(painter: const RadialDotHaloPainter()),
             ),
 
-            if (showVoiceWave)
+            // Gyro Mode takes precedence
+            if (_gyroMode)
+              GyroTiltAnimation(tiltX: _gyroTiltX, tiltY: _gyroTiltY)
+            else if (showVoiceWave)
               const DotMatrixVoiceAnimation()
             else if (_activeMode == 'Obstacle Avoiding')
               RadarDotAnimation(isActive: _isModeRunning)
@@ -374,11 +522,32 @@ class _HomeScreenState extends State<HomeScreen> {
             else
               const NormalDotAnimation(),
 
+            // Gyro mode label
+            if (_gyroMode)
+              Positioned(
+                bottom: 5,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentRed.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'GYRO MODE: TILT TO DRIVE',
+                    style: TextStyle(
+                      color: AppTheme.accentRed,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              )
             // Voice status text
-            if (_activeMode == 'Voice Control' &&
+            else if (_activeMode == 'Voice Control' &&
                 voiceService.statusMessage.isNotEmpty)
               Positioned(
-                bottom: -20,
+                bottom: 0,
                 child: Text(
                   voiceService.statusMessage.toUpperCase(),
                   style: const TextStyle(
