@@ -43,6 +43,19 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Android/Gradle local and generated files
+**/.gradle/
+**/local.properties
+**/key.properties
+**/*.keystore
+**/*.jks
+/android/.settings/
+/android/.project
+/android/.classpath
+/android/.cxx/
+/android/app/.cxx/
+/android/app/build/
+
 # DevTools
 devtools_options.yaml
 test_configure.sh
