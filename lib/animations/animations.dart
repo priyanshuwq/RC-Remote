@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/colors.dart';
 
+// ── Radar Dot Matrix Animation (Obstacle Avoiding) ────────────────────────────
 class RadarDotAnimation extends StatefulWidget {
   final bool isActive;
   const RadarDotAnimation({super.key, required this.isActive});
@@ -229,6 +230,7 @@ class _NormalCarPainter extends CustomPainter {
     final double startX = cx - (5 * gridScale);
     final double startY = cy - (3.5 * gridScale);
 
+    // Pure white dots — Nothing OS style controller
     final bodyPaint = Paint()..color = Colors.white;
 
     final List<List<int>> dots = [
@@ -304,15 +306,16 @@ class _NothingEqualizerPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const dotSize = 3.0;
+    const dotSize = 3.0; // radius
     const cols = 15;
-    const maxRows = 7;
+    const maxRows = 7; // max vertical dots
     const spacingX = 9.0;
     const spacingY = 9.0;
 
     final cx = size.width / 2;
     final cy = size.height / 2;
 
+    // Start drawing from the left side so the 15 columns are perfectly centered
     final startX = cx - ((cols - 1) * spacingX) / 2;
 
     for (int col = 0; col < cols; col++) {
@@ -335,6 +338,7 @@ class _NothingEqualizerPainter extends CustomPainter {
         ..color = AppTheme.accentRed.withValues(alpha: columnAlpha.clamp(0.0, 1.0));
 
       for (int i = 0; i < dotsCount; i++) {
+        // Find exact center vertical position for each dot in this column
         final double dy = cy + (i - (dotsCount - 1) / 2) * spacingY;
         canvas.drawCircle(Offset(startX + col * spacingX, dy), dotSize, paint);
       }
@@ -401,10 +405,6 @@ class RadialDotHaloPainter extends CustomPainter {
   bool shouldRepaint(_) => false;
 }
 
-// Gyro Tilt Dot Matrix Animation
-/// Nothing OS-style dot-matrix tilt indicator for Gyro Mode.
-/// [tiltX] lateral tilt: -1 (left) … +1 (right)
-/// [tiltY] forward/back: -1 (back) … +1 (forward)
 class GyroTiltAnimation extends StatefulWidget {
   final double tiltX;
   final double tiltY;
@@ -478,17 +478,14 @@ class _GyroTiltPainter extends CustomPainter {
     final startX = cx - center * _spacing;
     final startY = cy - center * _spacing;
 
-    final activeCol =
-        (center + tiltX.clamp(-1.0, 1.0) * center).round();
-    final activeRow =
-        (center - tiltY.clamp(-1.0, 1.0) * center).round();
+    final activeCol = (center + tiltX.clamp(-1.0, 1.0) * center).round();
+    final activeRow = (center - tiltY.clamp(-1.0, 1.0) * center).round();
 
     for (int row = 0; row < _rows; row++) {
       for (int col = 0; col < _cols; col++) {
         final dx = startX + col * _spacing;
         final dy = startY + row * _spacing;
 
-        // Radial fade: dots near the grid boundary become transparent.
         final edgeDx = (col - center) / center;
         final edgeDy = (row - center) / center;
         final edgeDist = math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);

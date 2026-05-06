@@ -100,6 +100,7 @@ class VoiceCommandService extends ChangeNotifier {
     _lastWords = '';
     _statusMessage = '';
     _actionTimer?.cancel();
+    debugPrint('VoiceCommandService.startListening: started');
     notifyListeners();
 
     try {
@@ -112,6 +113,9 @@ class VoiceCommandService extends ChangeNotifier {
             _commandProcessed = true;
             unawaited(_speech.stop());
             _isListening = false;
+            debugPrint(
+              'VoiceCommandService.startListening: final_words="$_lastWords"',
+            );
             _processWords(_lastWords);
             notifyListeners();
           }
@@ -133,13 +137,16 @@ class VoiceCommandService extends ChangeNotifier {
     _actionTimer?.cancel();
     await _speech.stop();
     _isListening = false;
+    debugPrint('VoiceCommandService.stopListening: stopped');
     notifyListeners();
   }
 
   void _processWords(String words) {
     for (final entry in _modeEntriesBySpecificity) {
       if (words.contains(entry.key)) {
-        debugPrint('Voice Match (Mode): ${entry.key}');
+        debugPrint(
+          'VoiceCommandService.match mode: phrase="${entry.key}" mode=${entry.value}',
+        );
         unawaited(_btService.setMode(entry.value));
         _statusMessage = 'Mode: ${entry.key}';
         notifyListeners();
@@ -149,7 +156,9 @@ class VoiceCommandService extends ChangeNotifier {
 
     for (final entry in _voiceEntriesBySpecificity) {
       if (words.contains(entry.key)) {
-        debugPrint('Voice Match (Cmd): ${entry.key}');
+        debugPrint(
+          'VoiceCommandService.match command: phrase="${entry.key}" command=${entry.value}',
+        );
         unawaited(_btService.sendCommand(entry.value));
         _statusMessage = 'Command: ${entry.key}';
 
@@ -167,6 +176,9 @@ class VoiceCommandService extends ChangeNotifier {
             : const Duration(milliseconds: 800);
 
         _actionTimer = Timer(duration, () {
+          debugPrint(
+            'VoiceCommandService.autoStop: command=${BluetoothService.cmdStop}',
+          );
           unawaited(_btService.sendCommand(BluetoothService.cmdStop));
         });
 
@@ -176,6 +188,7 @@ class VoiceCommandService extends ChangeNotifier {
     }
 
     _statusMessage = 'No voice detected';
+    debugPrint('VoiceCommandService.match none: words="$words"');
     notifyListeners();
   }
 

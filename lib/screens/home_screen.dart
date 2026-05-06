@@ -25,11 +25,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isDropdownOpen = false;
   bool _isModeRunning = false;
 
-  bool _fwdActive = false;
-  bool _backActive = false;
-  bool _leftActive = false;
-  bool _rightActive = false;
-
   double _gyroTiltX = 0.0;
   double _gyroTiltY = 0.0;
   String _lastGyroCmd = '';
@@ -37,6 +32,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static const double _gyroDeadzone = 2.5;
   static const double _gyroMax = 7.0;
+
+  bool _fwdActive = false;
+  bool _backActive = false;
+  bool _leftActive = false;
+  bool _rightActive = false;
 
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
@@ -52,9 +52,17 @@ class _HomeScreenState extends State<HomeScreen> {
   bool get _gyroMode => _activeMode == 'Gyro Control';
 
   void _cmd(String command, bool down) {
-    if (down) debugPrint('Button Press: $command');
     final bt = context.read<BluetoothService>();
-    bt.sendCommand(down ? command : BluetoothService.cmdStop);
+    final action = down ? 'press' : 'release';
+    final outgoing = down ? command : BluetoothService.cmdStop;
+    debugPrint(
+      'HomeScreen._cmd: action=$action input=$command outgoing=$outgoing',
+    );
+    if (down) {
+      bt.sendCommand(command);
+    } else {
+      bt.sendCommand(BluetoothService.cmdStop);
+    }
   }
 
   void _toggleDropdown() {
@@ -98,17 +106,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     final active = _activeMode == m;
                     return InkWell(
                       onTap: () {
-                        final wasGyro = _gyroMode;
                         setState(() {
                           _activeMode = m;
                           _isModeRunning = false;
                         });
-                        if (wasGyro) _stopGyro();
-                        if (m == 'Gyro Control') _startGyro();
-                        HapticFeedback.mediumImpact();
                         context.read<BluetoothService>().setMode(
                           RobotMode.manual,
                         );
+                        if (m == 'Gyro Control') {
+                          _startGyro();
+                        } else {
+                          _stopGyro();
+                        }
+
                         _closeDropdown();
                       },
                       child: Padding(
@@ -181,52 +191,36 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  @override
+  void dispose() {
+    _overlayEntry?.remove();
+    _accelSub?.cancel();
+    super.dispose();
+  }
+
   void _startGyro() {
-    final bt = context.read<BluetoothService>();
-    _accelSub = accelerometerEventStream().listen((AccelerometerEvent e) {
-      // In landscape mode, flip e.x so forward tilt moves the car forward.
-      final rawFwdBack = -e.x;
-      final rawLeftRight = e.y;
-
-      final normY = (rawFwdBack.clamp(-_gyroMax, _gyroMax) / _gyroMax);
-      final normX = (rawLeftRight.clamp(-_gyroMax, _gyroMax) / _gyroMax);
-
-      if (!mounted) return;
+    _accelSub?.cancel();
+    _accelSub = accelerometerEventStream().listen((event) {
+      if (!mounted || !_gyroMode) return;
       setState(() {
-        _gyroTiltX = normX;
-        _gyroTiltY = normY;
+        _gyroTiltX = event.x.clamp(-_gyroMax, _gyroMax);
+        _gyroTiltY = event.y.clamp(-_gyroMax, _gyroMax);
       });
 
-      final bool isFwd = rawFwdBack > _gyroDeadzone;
-      final bool isBk = rawFwdBack < -_gyroDeadzone;
-      final bool isRt = rawLeftRight > _gyroDeadzone;
-      final bool isLt = rawLeftRight < -_gyroDeadzone;
+      final bt = context.read<BluetoothService>();
+      String cmd = BluetoothService.cmdStop;
 
-      // Pick the dominant axis so only a single Arduino-supported command is sent.
-      final String cmd;
-      if (isFwd || isBk || isRt || isLt) {
-        final double absX = rawLeftRight.abs();
-        final double absY = rawFwdBack.abs();
-        if (absY >= absX) {
-          cmd = isFwd ? BluetoothService.cmdForward : BluetoothService.cmdBackward;
+      if (_gyroTiltY.abs() > _gyroDeadzone || _gyroTiltX.abs() > _gyroDeadzone) {
+        if (_gyroTiltY.abs() > _gyroTiltX.abs()) {
+          cmd = _gyroTiltY > 0 ? BluetoothService.cmdBackward : BluetoothService.cmdForward;
         } else {
-          cmd = isRt ? BluetoothService.cmdRight : BluetoothService.cmdLeft;
+          cmd = _gyroTiltX > 0 ? BluetoothService.cmdLeft : BluetoothService.cmdRight;
         }
-      } else {
-        cmd = BluetoothService.cmdStop;
       }
 
       if (cmd != _lastGyroCmd) {
         bt.sendCommand(cmd);
         _lastGyroCmd = cmd;
-
-        if (!mounted) return;
-        setState(() {
-          _fwdActive = cmd == BluetoothService.cmdForward;
-          _backActive = cmd == BluetoothService.cmdBackward;
-          _leftActive = cmd == BluetoothService.cmdLeft;
-          _rightActive = cmd == BluetoothService.cmdRight;
-        });
       }
     });
   }
@@ -234,23 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _stopGyro() {
     _accelSub?.cancel();
     _accelSub = null;
-    context.read<BluetoothService>().sendCommand(BluetoothService.cmdStop);
-    setState(() {
-      _gyroTiltX = 0.0;
-      _gyroTiltY = 0.0;
-      _lastGyroCmd = '';
-      _fwdActive = false;
-      _backActive = false;
-      _leftActive = false;
-      _rightActive = false;
-    });
-  }
-
-  @override
-  void dispose() {
-    _accelSub?.cancel();
-    _overlayEntry?.remove();
-    super.dispose();
+    _lastGyroCmd = '';
   }
 
   @override
@@ -263,8 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const Positioned.fill(child: DotGrid()),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Column(
                 children: [
                   TopBar(
@@ -284,6 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // LEFT PANEL: FWD / BACK
                         Expanded(
                           flex: 5,
                           child: IgnorePointer(
@@ -297,6 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(width: 20),
 
+                        // CENTER: Animation + Mode
                         Expanded(
                           flex: 6,
                           child: Column(
@@ -306,22 +285,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               FittedBox(
                                 fit: BoxFit.scaleDown,
                                 child: Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.center,
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     _modeButton(),
-                                    if (!_gyroMode) ...[
-                                      if (_activeMode ==
-                                              'Obstacle Avoiding' ||
-                                          _activeMode ==
-                                              'Human Following') ...[
-                                        const SizedBox(width: 12),
-                                        _startStopButton(),
-                                      ] else if (_activeMode ==
-                                          'Voice Control') ...[
-                                        const SizedBox(width: 12),
-                                        _voiceMicButton(),
-                                      ],
+                                    if (_activeMode == 'Obstacle Avoiding' ||
+                                        _activeMode == 'Human Following') ...[
+                                      const SizedBox(width: 12),
+                                      _startStopButton(),
+                                    ] else if (_activeMode == 'Voice Control') ...[
+                                      const SizedBox(width: 12),
+                                      _voiceMicButton(),
                                     ],
                                   ],
                                 ),
@@ -331,6 +304,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
 
                         const SizedBox(width: 20),
+                        // RIGHT PANEL: LEFT / RIGHT
                         Expanded(
                           flex: 5,
                           child: IgnorePointer(
@@ -354,6 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // FWD / BACK PANEL
   Widget _buildFwdBackPanel() {
     return RoundedPanel(
       child: Column(
@@ -402,6 +377,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // LEFT / RIGHT PANEL
   Widget _buildLeftRightPanel() {
     return RoundedPanel(
       child: Row(
@@ -452,6 +428,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // CENTER ANIMATION
   Widget _centerCar() {
     return Consumer<VoiceCommandService>(
       builder: (context, voiceService, child) {
@@ -476,6 +453,7 @@ class _HomeScreenState extends State<HomeScreen> {
             else
               const NormalDotAnimation(),
 
+            // Voice status text
             if (_gyroMode)
               Positioned(
                 bottom: 5,
@@ -523,6 +501,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // MODE BUTTON
   Widget _modeButton() {
     return CompositedTransformTarget(
       link: _layerLink,
