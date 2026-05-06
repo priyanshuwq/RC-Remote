@@ -6,6 +6,14 @@ Smart Rover is a Flutter mobile app to control a Bluetooth serial robot with man
 
 <img src="./assets/preview.png" alt="remote preview" width="750" />
 
+<br>
+
+<details>
+<summary><b>View Demo</b></summary>
+<br>
+<img src="./assets/Robot_preview.gif" alt="robot in action preview" width="750" />
+</details>
+
 </div>
 
 ## What This App Does
