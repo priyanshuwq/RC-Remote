@@ -112,6 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     final active = _activeMode == m;
                     return InkWell(
                       onTap: () {
+                        HapticFeedback.mediumImpact();
                         setState(() {
                           _activeMode = m;
                           _isModeRunning = false;
@@ -324,8 +325,12 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // statusMessage already contains the final display string ('FORWARD', etc.).
-  String _voiceDisplayLabel(String status) => status;
+  // Returns true when the voice status is a recognised movement command,
+  // so the label renders at full brightness instead of the dimmed idle state.
+  static bool _isVoiceCommandActive(String status) {
+    const activeLabels = {'FORWARD', 'BACKWARD', 'LEFT', 'RIGHT'};
+    return activeLabels.contains(status);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -587,7 +592,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Positioned(
                 bottom: 5,
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
+                  duration: const Duration(milliseconds: 150),
                   child: Container(
                     key: ValueKey(voiceService.statusMessage),
                     padding: const EdgeInsets.symmetric(
