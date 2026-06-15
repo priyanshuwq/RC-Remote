@@ -41,6 +41,7 @@ class BluetoothService extends ChangeNotifier {
   Map<String, String> _aliases = {};
 
   StreamSubscription<BluetoothDiscoveryResult>? _discoverySubscription;
+  StreamSubscription<Uint8List>? _connectionInputSubscription;
   bool _isDiscovering = false;
 
   // Initialization
@@ -211,6 +212,8 @@ class BluetoothService extends ChangeNotifier {
   }
 
   void _onDisconnected() {
+    _connectionInputSubscription?.cancel();
+    _connectionInputSubscription = null;
     _connection = null;
     _connectedDevice = null;
     _connectionState = BtConnectionState.disconnected;
