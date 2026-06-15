@@ -181,6 +181,7 @@ class VoiceCommandService extends ChangeNotifier {
         debugPrint(
           'VoiceCommandService.match command: phrase="${entry.key}" command=${entry.value}',
         );
+        HapticFeedback.lightImpact();
         unawaited(_btService.sendCommand(entry.value));
 
         // Show only the 4 direction words; hide stop and mode changes.
