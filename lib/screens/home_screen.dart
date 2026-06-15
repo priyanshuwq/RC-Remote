@@ -112,6 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     final active = _activeMode == m;
                     return InkWell(
                       onTap: () {
+                        HapticFeedback.mediumImpact();
                         setState(() {
                           _activeMode = m;
                           _isModeRunning = false;
