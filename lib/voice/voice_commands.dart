@@ -103,7 +103,7 @@ class VoiceCommandService extends ChangeNotifier {
       );
     } catch (e) {
       debugPrint('VoiceCommandService.initialise error: $e');
-      _statusMessage = 'Voice unavailable';
+      _statusMessage = 'Microphone unavailable';
       _isAvailable = false;
       _isListening = false;
     }
@@ -148,7 +148,7 @@ class VoiceCommandService extends ChangeNotifier {
       );
     } catch (e) {
       debugPrint('VoiceCommandService.startListening error: $e');
-      _statusMessage = 'Listening failed';
+      _statusMessage = 'Unable to listen';
       _isListening = false;
       notifyListeners();
     }
@@ -214,7 +214,7 @@ class VoiceCommandService extends ChangeNotifier {
       }
     }
 
-    _statusMessage = 'No voice detected';
+    _statusMessage = 'No command recognized';
     debugPrint('VoiceCommandService.match none: words="$words"');
     notifyListeners();
   }
