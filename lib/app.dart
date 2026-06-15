@@ -5,10 +5,10 @@ import 'bluetooth/bluetooth_service.dart';
 import 'voice/voice_commands.dart';
 import 'screens/home_screen.dart';
 
-class SmartRoverApp extends StatelessWidget {
+class RCRemoteApp extends StatelessWidget {
   final BluetoothService bluetoothService;
 
-  const SmartRoverApp({super.key, required this.bluetoothService});
+  const RCRemoteApp({super.key, required this.bluetoothService});
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +21,7 @@ class SmartRoverApp extends StatelessWidget {
         ),
       ],
       child: MaterialApp(
-        title: 'Smart Rover',
+        title: 'RC Remote',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: const ColorScheme.dark(
