@@ -4,10 +4,10 @@ import 'package:remote/bluetooth/bluetooth_service.dart';
 import 'package:remote/app.dart';
 
 void main() {
-  testWidgets('SmartRoverApp smoke test', (WidgetTester tester) async {
+  testWidgets('RCRemoteApp smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(
-      SmartRoverApp(bluetoothService: BluetoothService()),
+      RCRemoteApp(bluetoothService: BluetoothService()),
     );
-    expect(find.byType(SmartRoverApp), findsOneWidget);
+    expect(find.byType(RCRemoteApp), findsOneWidget);
   });
 }
