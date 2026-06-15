@@ -187,6 +187,7 @@ class BluetoothService extends ChangeNotifier {
       );
     } catch (e) {
       debugPrint('BluetoothService.connect error: $e');
+      _currentMode = RobotMode.manual;
       _connectionState = BtConnectionState.disconnected;
       notifyListeners();
     }
