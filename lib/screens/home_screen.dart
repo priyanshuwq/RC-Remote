@@ -199,8 +199,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String _modeToString(RobotMode mode) {
+    switch (mode) {
+      case RobotMode.manual:
+        return 'Normal';
+      case RobotMode.obstacle:
+        return 'Obstacle Avoiding';
+      case RobotMode.follow:
+        return 'Human Following';
+    }
+  }
+
+  late BluetoothService _bluetoothService;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _bluetoothService = context.read<BluetoothService>();
+        _bluetoothService.addListener(_onBluetoothModeChanged);
+      }
+    });
+  }
+
+  void _onBluetoothModeChanged() {
+    if (!mounted) return;
+    final newModeString = _modeToString(_bluetoothService.currentMode);
+    if (_activeMode != newModeString) {
+      setState(() {
+        _activeMode = newModeString;
+        _isModeRunning = _bluetoothService.currentMode != RobotMode.manual;
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _bluetoothService.removeListener(_onBluetoothModeChanged);
     _overlayEntry?.remove();
     _accelSub?.cancel();
     super.dispose();
