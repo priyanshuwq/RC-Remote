@@ -404,3 +404,148 @@ class RadialDotHaloPainter extends CustomPainter {
   @override
   bool shouldRepaint(_) => false;
 }
+
+class GyroTiltAnimation extends StatefulWidget {
+  final double tiltX;
+  final double tiltY;
+  const GyroTiltAnimation({
+    super.key,
+    required this.tiltX,
+    required this.tiltY,
+  });
+
+  @override
+  State<GyroTiltAnimation> createState() => _GyroTiltAnimationState();
+}
+
+class _GyroTiltAnimationState extends State<GyroTiltAnimation>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) => CustomPaint(
+        painter: _GyroTiltPainter(
+          tiltX: widget.tiltX,
+          tiltY: widget.tiltY,
+          pulse: _ctrl.value,
+        ),
+        size: const Size(140, 140),
+      ),
+    );
+  }
+}
+
+class _GyroTiltPainter extends CustomPainter {
+  final double tiltX;
+  final double tiltY;
+  final double pulse;
+
+  // Must match _gyroMax in home_screen.dart.
+  static const double _gyroMax = 7.0;
+
+  const _GyroTiltPainter({
+    required this.tiltX,
+    required this.tiltY,
+    required this.pulse,
+  });
+
+  static const int _cols = 11;
+  static const int _rows = 11;
+  static const double _spacing = 12.0;
+  static const double _dotR = 2.8;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final center = (_cols - 1) / 2.0;
+
+    final startX = cx - center * _spacing;
+    final startY = cy - center * _spacing;
+
+    // In landscape: X = pitch axis (forward/back), Y = roll axis (left/right).
+    // Normalize to [-1,1].
+    final normX = (tiltX / _gyroMax).clamp(-1.0, 1.0);
+    final normY = (tiltY / _gyroMax).clamp(-1.0, 1.0);
+
+    // X < 0 = forward tilt → dot moves toward top of screen → row decreases.
+    // X > 0 = backward tilt → dot moves toward bottom → row increases.
+    // Y < 0 = left tilt → dot moves left → col decreases.
+    // Y > 0 = right tilt → dot moves right → col increases.
+    final activeCol = (center + normY * center).round().clamp(0, _cols - 1);
+    final activeRow = (center + normX * center).round().clamp(0, _rows - 1);
+
+    // Intensity based on tilt magnitude so idle = dim, full tilt = bright.
+    final tiltMag = math
+        .sqrt(normX * normX + normY * normY)
+        .clamp(0.0, 1.0);
+    final centerAlpha = 0.5 + 0.5 * tiltMag + 0.15 * pulse;
+
+    for (int row = 0; row < _rows; row++) {
+      for (int col = 0; col < _cols; col++) {
+        final dx = startX + col * _spacing;
+        final dy = startY + row * _spacing;
+
+        final edgeDx = (col - center) / center;
+        final edgeDy = (row - center) / center;
+        final edgeDist = math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy);
+        final edgeFade = (1.0 - edgeDist).clamp(0.0, 1.0);
+        if (edgeFade <= 0) continue;
+
+        final dC = (col - activeCol).abs();
+        final dR = (row - activeRow).abs();
+        final dist = math.sqrt((dC * dC + dR * dR).toDouble());
+
+        final bool isCenter = dC == 0 && dR == 0;
+        final bool isInner = dist <= 1.4;
+        final bool isMid = dist <= 2.5;
+
+        Color color;
+        double radius;
+        if (isCenter) {
+          final alpha = centerAlpha.clamp(0.0, 1.0) * edgeFade;
+          color = AppTheme.accentRed.withValues(alpha: alpha);
+          radius = _dotR + 0.8 * tiltMag;
+        } else if (isInner) {
+          color = AppTheme.accentRed.withValues(
+            alpha: (0.5 * tiltMag + 0.1) * edgeFade,
+          );
+          radius = _dotR;
+        } else if (isMid) {
+          color = AppTheme.accentRed.withValues(
+            alpha: (0.2 * tiltMag + 0.04) * edgeFade,
+          );
+          radius = _dotR - 0.4;
+        } else {
+          final alpha = math.max(0.0, (0.18 - dist * 0.02)) * edgeFade;
+          color = Colors.white.withValues(alpha: alpha);
+          radius = _dotR - 0.8;
+        }
+
+        canvas.drawCircle(Offset(dx, dy), radius, Paint()..color = color);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GyroTiltPainter old) =>
+      old.tiltX != tiltX || old.tiltY != tiltY || old.pulse != pulse;
+}

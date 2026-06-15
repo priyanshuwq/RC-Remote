@@ -68,14 +68,15 @@ class VoiceCommandService extends ChangeNotifier {
     try {
       _isAvailable = await _speech.initialize(
         onStatus: (status) {
-          _statusMessage = status;
+          // Only use status to track listening state — never overwrite a
+          // command result with raw SDK strings like 'done' or 'notListening'.
           if (status == 'notListening' || status == 'done') {
             _isListening = false;
+            notifyListeners();
           }
-          notifyListeners();
         },
         onError: (err) {
-          _statusMessage = err.errorMsg;
+          _statusMessage = _friendlyError(err.errorMsg);
           _isListening = false;
           notifyListeners();
         },
@@ -148,7 +149,7 @@ class VoiceCommandService extends ChangeNotifier {
           'VoiceCommandService.match mode: phrase="${entry.key}" mode=${entry.value}',
         );
         unawaited(_btService.setMode(entry.value));
-        _statusMessage = 'Mode: ${entry.key}';
+        _statusMessage = '';
         notifyListeners();
         return;
       }
@@ -160,7 +161,9 @@ class VoiceCommandService extends ChangeNotifier {
           'VoiceCommandService.match command: phrase="${entry.key}" command=${entry.value}',
         );
         unawaited(_btService.sendCommand(entry.value));
-        _statusMessage = 'Command: ${entry.key}';
+
+        // Show only the 4 direction words; hide stop and mode changes.
+        _statusMessage = _cmdDirectionLabel(entry.value);
 
         _actionTimer?.cancel();
 
@@ -187,9 +190,40 @@ class VoiceCommandService extends ChangeNotifier {
       }
     }
 
-    _statusMessage = 'Not recognised: "$words"';
+    _statusMessage = 'No voice detected';
     debugPrint('VoiceCommandService.match none: words="$words"');
     notifyListeners();
+  }
+
+  // Returns the display label for a BT movement command, empty for others.
+  static String _cmdDirectionLabel(String cmd) {
+    switch (cmd) {
+      case BluetoothService.cmdForward:
+        return 'FORWARD';
+      case BluetoothService.cmdBackward:
+        return 'BACKWARD';
+      case BluetoothService.cmdLeft:
+        return 'LEFT';
+      case BluetoothService.cmdRight:
+        return 'RIGHT';
+      default:
+        return '';
+    }
+  }
+
+  static String _friendlyError(String errorMsg) {
+    switch (errorMsg) {
+      case 'error_no_match':
+        return 'No voice detected';
+      case 'error_speech_timeout':
+        return 'Listening timed out';
+      case 'error_network':
+        return 'Network unavailable';
+      case 'error_audio':
+        return 'Microphone error';
+      default:
+        return 'Voice unavailable';
+    }
   }
 
   @override

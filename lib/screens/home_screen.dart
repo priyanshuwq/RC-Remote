@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 import '../bluetooth/bluetooth_service.dart';
 import '../voice/voice_commands.dart';
@@ -23,6 +25,20 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isDropdownOpen = false;
   bool _isModeRunning = false;
 
+  double _gyroTiltX = 0.0;
+  double _gyroTiltY = 0.0;
+  double _gyroSmoothedX = 0.0;
+  double _gyroSmoothedY = 0.0;
+  String _lastGyroCmd = '';
+  String _gyroLabel = 'TILT TO DRIVE';
+  StreamSubscription<AccelerometerEvent>? _accelSub;
+
+  // Deadzone in m/s²; max is the saturation point for full tilt.
+  static const double _gyroDeadzone = 2.2;
+  static const double _gyroMax = 7.0;
+  // Low-pass smoothing factor (0 = no smoothing, 1 = frozen).
+  static const double _gyroAlpha = 0.25;
+
   bool _fwdActive = false;
   bool _backActive = false;
   bool _leftActive = false;
@@ -36,7 +52,10 @@ class _HomeScreenState extends State<HomeScreen> {
     'Voice Control',
     'Obstacle Avoiding',
     'Human Following',
+    'Gyro Control',
   ];
+
+  bool get _gyroMode => _activeMode == 'Gyro Control';
 
   void _cmd(String command, bool down) {
     final bt = context.read<BluetoothService>();
@@ -100,6 +119,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         context.read<BluetoothService>().setMode(
                           RobotMode.manual,
                         );
+                        if (m == 'Gyro Control') {
+                          _startGyro();
+                        } else {
+                          _stopGyro();
+                        }
+
                         _closeDropdown();
                       },
                       child: Padding(
@@ -112,7 +137,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             Text(
                               m,
                               style: TextStyle(
-                                color: active ? AppTheme.accentRed : Colors.white,
+                                color: active
+                                    ? AppTheme.accentRed
+                                    : Colors.white,
                                 fontSize: 13,
                                 fontWeight: active
                                     ? FontWeight.w700
@@ -175,8 +202,94 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _overlayEntry?.remove();
+    _accelSub?.cancel();
     super.dispose();
   }
+
+  void _startGyro() {
+    _accelSub?.cancel();
+    _gyroSmoothedX = 0.0;
+    _gyroSmoothedY = 0.0;
+    _accelSub = accelerometerEventStream().listen((event) {
+      if (!mounted || !_gyroMode) return;
+
+      // Low-pass filter: exponential moving average kills high-frequency jitter.
+      _gyroSmoothedX =
+          _gyroAlpha * event.x + (1 - _gyroAlpha) * _gyroSmoothedX;
+      _gyroSmoothedY =
+          _gyroAlpha * event.y + (1 - _gyroAlpha) * _gyroSmoothedY;
+
+      final double sx = _gyroSmoothedX.clamp(-_gyroMax, _gyroMax);
+      final double sy = _gyroSmoothedY.clamp(-_gyroMax, _gyroMax);
+
+      // Android sensor axes are in the portrait (natural) frame, not the
+      // rotated screen frame. In landscape (rotated 90° CCW, USB right):
+      //   Landscape FORWARD tilt (top long-edge away) → portrait +X dominates
+      //   Landscape FORWARD tilt (top long-edge away) → portrait -X dominates
+      //   Landscape BACKWARD tilt (top long-edge toward you) → portrait +X
+      //   Landscape LEFT  tilt (left short-edge down) → portrait -Y dominates
+      //   Landscape RIGHT tilt (right short-edge down) → portrait +Y
+      String cmd = BluetoothService.cmdStop;
+      String label = 'TILT TO DRIVE';
+
+      if (sx.abs() > _gyroDeadzone || sy.abs() > _gyroDeadzone) {
+        if (sx.abs() > sy.abs()) {
+          // X dominates → pitch (forward / backward)
+          if (sx < 0) {
+            cmd = BluetoothService.cmdForward;
+            label = 'FORWARD';
+          } else {
+            cmd = BluetoothService.cmdBackward;
+            label = 'BACKWARD';
+          }
+        } else {
+          // Y dominates → roll (left / right)
+          if (sy < 0) {
+            cmd = BluetoothService.cmdLeft;
+            label = 'LEFT';
+          } else {
+            cmd = BluetoothService.cmdRight;
+            label = 'RIGHT';
+          }
+        }
+      }
+
+      if (cmd != _lastGyroCmd) {
+        context.read<BluetoothService>().sendCommand(cmd);
+        HapticFeedback.lightImpact();
+        _lastGyroCmd = cmd;
+        debugPrint('HomeScreen.gyro: cmd=$cmd sx=${sx.toStringAsFixed(2)} sy=${sy.toStringAsFixed(2)}');
+      }
+
+      setState(() {
+        _gyroTiltX = sx;
+        _gyroTiltY = sy;
+        _gyroLabel = label;
+        _fwdActive = cmd == BluetoothService.cmdForward;
+        _backActive = cmd == BluetoothService.cmdBackward;
+        _leftActive = cmd == BluetoothService.cmdLeft;
+        _rightActive = cmd == BluetoothService.cmdRight;
+      });
+    });
+  }
+
+  void _stopGyro() {
+    _accelSub?.cancel();
+    _accelSub = null;
+    _lastGyroCmd = '';
+    _gyroLabel = 'TILT TO DRIVE';
+    setState(() {
+      _gyroTiltX = 0.0;
+      _gyroTiltY = 0.0;
+      _fwdActive = false;
+      _backActive = false;
+      _leftActive = false;
+      _rightActive = false;
+    });
+  }
+
+  // statusMessage already contains the final display string ('FORWARD', etc.).
+  String _voiceDisplayLabel(String status) => status;
 
   @override
   Widget build(BuildContext context) {
@@ -209,7 +322,17 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         // LEFT PANEL: FWD / BACK
-                        Expanded(flex: 5, child: _buildFwdBackPanel()),
+                        Expanded(
+                          flex: 5,
+                          child: IgnorePointer(
+                            ignoring: _gyroMode,
+                            child: AnimatedOpacity(
+                              opacity: _gyroMode ? 0.6 : 1.0,
+                              duration: const Duration(milliseconds: 300),
+                              child: _buildFwdBackPanel(),
+                            ),
+                          ),
+                        ),
                         const SizedBox(width: 20),
 
                         // CENTER: Animation + Mode
@@ -229,7 +352,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                         _activeMode == 'Human Following') ...[
                                       const SizedBox(width: 12),
                                       _startStopButton(),
-                                    ] else if (_activeMode == 'Voice Control') ...[
+                                    ] else if (_activeMode ==
+                                        'Voice Control') ...[
                                       const SizedBox(width: 12),
                                       _voiceMicButton(),
                                     ],
@@ -242,7 +366,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         const SizedBox(width: 20),
                         // RIGHT PANEL: LEFT / RIGHT
-                        Expanded(flex: 5, child: _buildLeftRightPanel()),
+                        Expanded(
+                          flex: 5,
+                          child: IgnorePointer(
+                            ignoring: _gyroMode,
+                            child: AnimatedOpacity(
+                              opacity: _gyroMode ? 0.6 : 1.0,
+                              duration: const Duration(milliseconds: 300),
+                              child: _buildLeftRightPanel(),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -267,6 +401,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isActive: _fwdActive,
               isTopHalf: true,
               onDown: () {
+                HapticFeedback.lightImpact();
                 setState(() => _fwdActive = true);
                 _cmd(BluetoothService.cmdForward, true);
               },
@@ -288,6 +423,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isActive: _backActive,
               isTopHalf: false,
               onDown: () {
+                HapticFeedback.lightImpact();
                 setState(() => _backActive = true);
                 _cmd(BluetoothService.cmdBackward, true);
               },
@@ -315,6 +451,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isTopHalf: true,
               isHorizontal: true,
               onDown: () {
+                HapticFeedback.lightImpact();
                 setState(() => _leftActive = true);
                 _cmd(BluetoothService.cmdLeft, true);
               },
@@ -337,6 +474,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isHorizontal: true,
               isTopHalf: false,
               onDown: () {
+                HapticFeedback.lightImpact();
                 setState(() => _rightActive = true);
                 _cmd(BluetoothService.cmdRight, true);
               },
@@ -365,7 +503,9 @@ class _HomeScreenState extends State<HomeScreen> {
               child: CustomPaint(painter: const RadialDotHaloPainter()),
             ),
 
-            if (showVoiceWave)
+            if (_gyroMode)
+              GyroTiltAnimation(tiltX: _gyroTiltX, tiltY: _gyroTiltY)
+            else if (showVoiceWave)
               const DotMatrixVoiceAnimation()
             else if (_activeMode == 'Obstacle Avoiding')
               RadarDotAnimation(isActive: _isModeRunning)
@@ -374,18 +514,63 @@ class _HomeScreenState extends State<HomeScreen> {
             else
               const NormalDotAnimation(),
 
-            // Voice status text
-            if (_activeMode == 'Voice Control' &&
+            // Direction / status label
+            if (_gyroMode)
+              Positioned(
+                bottom: 5,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 150),
+                  child: Container(
+                    key: ValueKey(_gyroLabel),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentRed.withValues(
+                        alpha: _gyroLabel == 'TILT TO DRIVE' ? 0.06 : 0.15,
+                      ),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _gyroLabel,
+                      style: TextStyle(
+                        color: AppTheme.accentRed.withValues(
+                          alpha: _gyroLabel == 'TILT TO DRIVE' ? 0.5 : 1.0,
+                        ),
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else if (_activeMode == 'Voice Control' &&
                 voiceService.statusMessage.isNotEmpty)
               Positioned(
-                bottom: -20,
-                child: Text(
-                  voiceService.statusMessage.toUpperCase(),
-                  style: const TextStyle(
-                    color: AppTheme.accentRed,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 2.0,
+                bottom: 5,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: Container(
+                    key: ValueKey(voiceService.statusMessage),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentRed.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      _voiceDisplayLabel(voiceService.statusMessage),
+                      style: const TextStyle(
+                        color: AppTheme.accentRed,
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -512,7 +697,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Icon(
               voiceService.isListening ? Icons.mic : Icons.mic_none,
-              color: voiceService.isListening ? AppTheme.accentRed : Colors.white,
+              color: voiceService.isListening
+                  ? AppTheme.accentRed
+                  : Colors.white,
               size: 18,
             ),
           ),
