@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/colors.dart';
 
-// ── Radar Dot Matrix Animation (Obstacle Avoiding) ────────────────────────────
 class RadarDotAnimation extends StatefulWidget {
   final bool isActive;
   const RadarDotAnimation({super.key, required this.isActive});
