@@ -28,6 +28,8 @@ class BluetoothService extends ChangeNotifier {
 
   BtConnectionState _connectionState = BtConnectionState.disconnected;
   RobotMode _currentMode = RobotMode.manual;
+  RobotMode? _pendingMode;
+  Timer? _modeTimeout;
 
   List<BluetoothDevice> _bondedDevices = [];
   final List<BluetoothDiscoveryResult> _discoveredDevices = [];
@@ -176,6 +178,14 @@ class BluetoothService extends ChangeNotifier {
       _connection = conn;
       _connectedDevice = device;
       _connectionState = BtConnectionState.connected;
+      _pendingMode = null;
+      _modeTimeout?.cancel();
+      _modeTimeout = null;
+      
+      debugPrint(
+        'BluetoothService.connectToDevice: reconnected, validating mode state (currentMode=$_currentMode)',
+      );
+      
       notifyListeners();
 
       _connectionInputSubscription?.cancel();
@@ -207,6 +217,15 @@ class BluetoothService extends ChangeNotifier {
     _connection = null;
     _connectedDevice = null;
     _connectionState = BtConnectionState.disconnected;
+    _currentMode = RobotMode.manual;
+    _pendingMode = null;
+    _modeTimeout?.cancel();
+    _modeTimeout = null;
+    
+    debugPrint(
+      'BluetoothService._onDisconnected: state reconciled to manual mode',
+    );
+    
     notifyListeners();
   }
 
@@ -246,16 +265,37 @@ class BluetoothService extends ChangeNotifier {
 
   Future<void> setMode(RobotMode mode) async {
     debugPrint('BluetoothService.setMode: mode=$mode');
-    _currentMode = mode;
+    
+    if (!isConnected) {
+      debugPrint('BluetoothService.setMode dropped: not connected');
+      return;
+    }
+
+    _pendingMode = mode;
+    _modeTimeout?.cancel();
+
+    String modeCmd;
     switch (mode) {
       case RobotMode.manual:
-        await sendCommand(cmdModeManual);
+        modeCmd = cmdModeManual;
       case RobotMode.obstacle:
-        await sendCommand(cmdModeObstacle);
+        modeCmd = cmdModeObstacle;
       case RobotMode.follow:
-        await sendCommand(cmdModeFollow);
+        modeCmd = cmdModeFollow;
     }
-    notifyListeners();
+
+    await sendCommand(modeCmd);
+
+    _modeTimeout = Timer(const Duration(milliseconds: 500), () {
+      if (_pendingMode == mode) {
+        debugPrint(
+          'BluetoothService.setMode timeout: mode=$mode (no confirmation received)',
+        );
+        _pendingMode = null;
+        _currentMode = mode;
+        notifyListeners();
+      }
+    });
   }
 
   @override

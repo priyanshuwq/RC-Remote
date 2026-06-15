@@ -27,5 +27,5 @@ Future<void> main() async {
     debugPrint('Startup Bluetooth initialization error: $e');
   }
 
-  runApp(SmartRoverApp(bluetoothService: bluetoothService));
+  runApp(RCRemoteApp(bluetoothService: bluetoothService));
 }
