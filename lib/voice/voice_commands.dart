@@ -119,7 +119,7 @@ class VoiceCommandService extends ChangeNotifier {
     _isListening = true;
     _commandProcessed = false;
     _lastWords = '';
-    _statusMessage = '';
+    _statusMessage = 'LISTENING...';
     _actionTimer?.cancel();
     debugPrint('VoiceCommandService.startListening: started');
     notifyListeners();
