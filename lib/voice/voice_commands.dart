@@ -18,7 +18,26 @@ class VoiceCommandService extends ChangeNotifier {
 
   Timer? _actionTimer;
 
-  VoiceCommandService(this._btService);
+  VoiceCommandService(this._btService) {
+    _btService.addListener(_onBluetoothStateChanged);
+  }
+
+  void _onBluetoothStateChanged() {
+    if (!_btService.isConnected && _isListening) {
+      _clearAllState();
+    }
+  }
+
+  void _clearAllState() {
+    _actionTimer?.cancel();
+    _actionTimer = null;
+    _isListening = false;
+    _commandProcessed = false;
+    _lastWords = '';
+    _statusMessage = '';
+    debugPrint('VoiceCommandService._clearAllState: state cleared on disconnect');
+    notifyListeners();
+  }
 
   bool get isListening => _isListening;
   bool get isAvailable => _isAvailable;
@@ -228,6 +247,7 @@ class VoiceCommandService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _btService.removeListener(_onBluetoothStateChanged);
     _actionTimer?.cancel();
     _speech.cancel();
     super.dispose();
