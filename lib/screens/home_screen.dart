@@ -112,6 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     final active = _activeMode == m;
                     return InkWell(
                       onTap: () {
+                        HapticFeedback.mediumImpact();
                         setState(() {
                           _activeMode = m;
                           _isModeRunning = false;
@@ -199,8 +200,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String _modeToString(RobotMode mode) {
+    switch (mode) {
+      case RobotMode.manual:
+        return 'Normal';
+      case RobotMode.obstacle:
+        return 'Obstacle Avoiding';
+      case RobotMode.follow:
+        return 'Human Following';
+    }
+  }
+
+  late BluetoothService _bluetoothService;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _bluetoothService = context.read<BluetoothService>();
+        _bluetoothService.addListener(_onBluetoothModeChanged);
+      }
+    });
+  }
+
+  void _onBluetoothModeChanged() {
+    if (!mounted) return;
+    final newModeString = _modeToString(_bluetoothService.currentMode);
+    if (_activeMode != newModeString) {
+      setState(() {
+        _activeMode = newModeString;
+        _isModeRunning = _bluetoothService.currentMode != RobotMode.manual;
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _bluetoothService.removeListener(_onBluetoothModeChanged);
     _overlayEntry?.remove();
     _accelSub?.cancel();
     super.dispose();
@@ -288,8 +325,12 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // statusMessage already contains the final display string ('FORWARD', etc.).
-  String _voiceDisplayLabel(String status) => status;
+  // Returns true when the voice status is a recognised movement command,
+  // so the label renders at full brightness instead of the dimmed idle state.
+  static bool _isVoiceCommandActive(String status) {
+    const activeLabels = {'FORWARD', 'BACKWARD', 'LEFT', 'RIGHT'};
+    return activeLabels.contains(status);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -551,7 +592,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Positioned(
                 bottom: 5,
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
+                  duration: const Duration(milliseconds: 150),
                   child: Container(
                     key: ValueKey(voiceService.statusMessage),
                     padding: const EdgeInsets.symmetric(
@@ -559,13 +600,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: AppTheme.accentRed.withValues(alpha: 0.1),
+                      color: AppTheme.accentRed.withValues(
+                        alpha: voiceService.statusMessage == 'LISTENING...'
+                            ? 0.06
+                            : 0.15,
+                      ),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       _voiceDisplayLabel(voiceService.statusMessage),
-                      style: const TextStyle(
-                        color: AppTheme.accentRed,
+                      style: TextStyle(
+                        color: AppTheme.accentRed.withValues(
+                          alpha: voiceService.statusMessage == 'LISTENING...'
+                              ? 0.5
+                              : 1.0,
+                        ),
                         fontSize: 8,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.2,
