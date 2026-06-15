@@ -1,5 +1,5 @@
 name: remote
-description: "Smart Rover – RC Robot Car Controller"
+description: "RC Remote – Bluetooth Robot Controller"
 publish_to: 'none'
 version: 1.0.3+4
 

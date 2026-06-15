@@ -213,9 +213,15 @@ class BluetoothService extends ChangeNotifier {
     _connection = null;
     _connectedDevice = null;
     _connectionState = BtConnectionState.disconnected;
+    _currentMode = RobotMode.manual;
+    _pendingMode = null;
     _modeTimeout?.cancel();
     _modeTimeout = null;
-    _pendingMode = null;
+    
+    debugPrint(
+      'BluetoothService._onDisconnected: state reconciled to manual mode',
+    );
+    
     notifyListeners();
   }
 

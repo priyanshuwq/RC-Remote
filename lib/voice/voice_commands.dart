@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../bluetooth/bluetooth_service.dart';
@@ -18,7 +19,26 @@ class VoiceCommandService extends ChangeNotifier {
 
   Timer? _actionTimer;
 
-  VoiceCommandService(this._btService);
+  VoiceCommandService(this._btService) {
+    _btService.addListener(_onBluetoothStateChanged);
+  }
+
+  void _onBluetoothStateChanged() {
+    if (!_btService.isConnected && _isListening) {
+      _clearAllState();
+    }
+  }
+
+  void _clearAllState() {
+    _actionTimer?.cancel();
+    _actionTimer = null;
+    _isListening = false;
+    _commandProcessed = false;
+    _lastWords = '';
+    _statusMessage = '';
+    debugPrint('VoiceCommandService._clearAllState: state cleared on disconnect');
+    notifyListeners();
+  }
 
   bool get isListening => _isListening;
   bool get isAvailable => _isAvailable;
@@ -99,7 +119,7 @@ class VoiceCommandService extends ChangeNotifier {
     _isListening = true;
     _commandProcessed = false;
     _lastWords = '';
-    _statusMessage = '';
+    _statusMessage = 'LISTENING...';
     _actionTimer?.cancel();
     debugPrint('VoiceCommandService.startListening: started');
     notifyListeners();
@@ -148,8 +168,9 @@ class VoiceCommandService extends ChangeNotifier {
         debugPrint(
           'VoiceCommandService.match mode: phrase="${entry.key}" mode=${entry.value}',
         );
+        HapticFeedback.mediumImpact();
         unawaited(_btService.setMode(entry.value));
-        _statusMessage = '';
+        _statusMessage = _modeName(entry.value);
         notifyListeners();
         return;
       }
@@ -160,6 +181,7 @@ class VoiceCommandService extends ChangeNotifier {
         debugPrint(
           'VoiceCommandService.match command: phrase="${entry.key}" command=${entry.value}',
         );
+        HapticFeedback.lightImpact();
         unawaited(_btService.sendCommand(entry.value));
 
         // Show only the 4 direction words; hide stop and mode changes.
@@ -211,6 +233,17 @@ class VoiceCommandService extends ChangeNotifier {
     }
   }
 
+  static String _modeName(RobotMode mode) {
+    switch (mode) {
+      case RobotMode.manual:
+        return 'MANUAL MODE';
+      case RobotMode.obstacle:
+        return 'OBSTACLE AVOIDING';
+      case RobotMode.follow:
+        return 'HUMAN FOLLOWING';
+    }
+  }
+
   static String _friendlyError(String errorMsg) {
     switch (errorMsg) {
       case 'error_no_match':
@@ -228,6 +261,7 @@ class VoiceCommandService extends ChangeNotifier {
 
   @override
   void dispose() {
+    _btService.removeListener(_onBluetoothStateChanged);
     _actionTimer?.cancel();
     _speech.cancel();
     super.dispose();

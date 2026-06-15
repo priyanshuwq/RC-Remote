@@ -200,8 +200,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String _modeToString(RobotMode mode) {
+    switch (mode) {
+      case RobotMode.manual:
+        return 'Normal';
+      case RobotMode.obstacle:
+        return 'Obstacle Avoiding';
+      case RobotMode.follow:
+        return 'Human Following';
+    }
+  }
+
+  late BluetoothService _bluetoothService;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _bluetoothService = context.read<BluetoothService>();
+        _bluetoothService.addListener(_onBluetoothModeChanged);
+      }
+    });
+  }
+
+  void _onBluetoothModeChanged() {
+    if (!mounted) return;
+    final newModeString = _modeToString(_bluetoothService.currentMode);
+    if (_activeMode != newModeString) {
+      setState(() {
+        _activeMode = newModeString;
+        _isModeRunning = _bluetoothService.currentMode != RobotMode.manual;
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _bluetoothService.removeListener(_onBluetoothModeChanged);
     _overlayEntry?.remove();
     _accelSub?.cancel();
     super.dispose();
@@ -565,21 +601,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: AppTheme.accentRed.withValues(
-                        alpha: _isVoiceCommandActive(voiceService.statusMessage)
-                            ? 0.15
-                            : 0.06,
+                        alpha: voiceService.statusMessage == 'LISTENING...'
+                            ? 0.06
+                            : 0.15,
                       ),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      voiceService.statusMessage,
+                      _voiceDisplayLabel(voiceService.statusMessage),
                       style: TextStyle(
                         color: AppTheme.accentRed.withValues(
-                          alpha: _isVoiceCommandActive(
-                            voiceService.statusMessage,
-                          )
-                              ? 1.0
-                              : 0.5,
+                          alpha: voiceService.statusMessage == 'LISTENING...'
+                              ? 0.5
+                              : 1.0,
                         ),
                         fontSize: 8,
                         fontWeight: FontWeight.w700,

@@ -1,8 +1,8 @@
 <div align="center">
 
-# Smart Rover RC Remote
+# RC Remote
 
-Smart Rover is a Flutter mobile app to control a Bluetooth serial robot with manual controls, autonomous modes, and voice commands.
+RC Remote is a Flutter mobile app to control a Bluetooth serial robot with manual controls, autonomous modes, and voice commands.
 
 <img src="./assets/preview.png" alt="remote preview" width="750" />
 
@@ -50,7 +50,7 @@ Smart Rover is a Flutter mobile app to control a Bluetooth serial robot with man
 
 1. On the phone, enable Bluetooth.
 2. Pair your Bluetooth device in Android system settings first.
-3. Open the Smart Rover app.
+3. Open the RC Remote app.
 4. Grant Bluetooth, location, and microphone permissions when prompted.
 5. Select the paired Bluetooth device inside the app.
 6. Test D-pad, mode buttons, and voice commands.
