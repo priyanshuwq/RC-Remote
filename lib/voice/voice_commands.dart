@@ -138,6 +138,7 @@ class VoiceCommandService extends ChangeNotifier {
     _actionTimer?.cancel();
     await _speech.stop();
     _isListening = false;
+    _statusMessage = '';
     debugPrint('VoiceCommandService.stopListening: stopped');
     notifyListeners();
   }
