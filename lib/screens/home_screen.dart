@@ -288,12 +288,8 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // Returns true when the voice status is a recognised movement command,
-  // so the label renders at full brightness instead of the dimmed idle state.
-  static bool _isVoiceCommandActive(String status) {
-    const activeLabels = {'FORWARD', 'BACKWARD', 'LEFT', 'RIGHT'};
-    return activeLabels.contains(status);
-  }
+  // statusMessage already contains the final display string ('FORWARD', etc.).
+  String _voiceDisplayLabel(String status) => status;
 
   @override
   Widget build(BuildContext context) {
@@ -555,7 +551,7 @@ class _HomeScreenState extends State<HomeScreen> {
               Positioned(
                 bottom: 5,
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 150),
+                  duration: const Duration(milliseconds: 200),
                   child: Container(
                     key: ValueKey(voiceService.statusMessage),
                     padding: const EdgeInsets.symmetric(
@@ -563,23 +559,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: AppTheme.accentRed.withValues(
-                        alpha: _isVoiceCommandActive(voiceService.statusMessage)
-                            ? 0.15
-                            : 0.06,
-                      ),
+                      color: AppTheme.accentRed.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      voiceService.statusMessage,
-                      style: TextStyle(
-                        color: AppTheme.accentRed.withValues(
-                          alpha: _isVoiceCommandActive(
-                            voiceService.statusMessage,
-                          )
-                              ? 1.0
-                              : 0.5,
-                        ),
+                      _voiceDisplayLabel(voiceService.statusMessage),
+                      style: const TextStyle(
+                        color: AppTheme.accentRed,
                         fontSize: 8,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.2,
